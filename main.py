@@ -71,3 +71,15 @@ async def delete_student(student_id: int):
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"Student with id {student_id} not found"
         )
+
+@app.put("/students/{student_id}", status_code=status.HTTP_200_OK)
+async def update_student_by_id(student_id: int, updated_student: Student):
+    for index, student in enumerate(students):
+        if student.id == student_id:
+            students[index] = updated_student
+            return {"message": "Updated student successfully", "data": updated_student}
+    
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, 
+        detail=f"Item with ID {student_id} not found"
+        )
