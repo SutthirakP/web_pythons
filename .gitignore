@@ -1,0 +1,12 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Claude Code / agent tooling (kept locally, not published)
+.claude/
+.agents/
+
+# Next.js (frontend/.gitignore also covers this, kept here as a backstop)
+frontend/node_modules/
+frontend/.next/
