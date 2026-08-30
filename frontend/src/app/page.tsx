@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 
 type Student = {
   id: number;
@@ -38,6 +39,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [editingScoreId, setEditingScoreId] = useState<number | null>(null);
+  const [scoreDraft, setScoreDraft] = useState("");
 
   // GET STUDENTS
   useEffect(() => {
@@ -127,6 +130,50 @@ export default function Home() {
     }
   }
 
+  // EDIT SCORE
+  function startEditScore(student: Student) {
+    setFeedback(null);
+    setEditingScoreId(student.id);
+    setScoreDraft(String(student.score));
+  }
+
+  async function saveScore(student: Student) {
+    const newScore = Number(scoreDraft);
+    if (scoreDraft.trim() === "" || Number.isNaN(newScore)) {
+      setFeedback({ type: "error", text: "Score must be a number" });
+      return;
+    }
+
+    setFeedback(null);
+
+    try {
+      const response = await fetch(`${API_URL}/${student.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        // Send the student back in full so PUT doesn't wipe other fields.
+        body: JSON.stringify({ ...student, score: newScore }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.detail || "Failed to update score");
+      }
+
+      const updated: Student = result.data ?? result;
+      setStudents((current) =>
+        current.map((s) => (s.id === student.id ? updated : s))
+      );
+      setFeedback({ type: "success", text: result.message || "Score updated" });
+      setEditingScoreId(null);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Failed to update score";
+      setFeedback({ type: "error", text });
+    }
+  }
+
   // RESET STUDENTS
   async function resetStudents() {
     setFeedback(null);
@@ -155,9 +202,14 @@ export default function Home() {
 
   return (
     <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-8 px-4 py-10 sm:px-6 lg:px-8">
-      <header>
-        <h1 className="text-2xl font-bold tracking-tight">Student Records</h1>
-        <p className="text-sm text-muted">Track and manage student scores</p>
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Student Records</h1>
+          <p className="text-sm text-muted">Track and manage student scores</p>
+        </div>
+        <Link href="/products" className="text-sm text-muted hover:underline">
+          Products →
+        </Link>
       </header>
 
       {feedback && (
@@ -255,10 +307,7 @@ export default function Home() {
           ) : (
             <ul className="flex flex-col gap-3">
               {students.map((student) => (
-                <li
-                  key={student.id}
-                  className="card flex items-center gap-4 p-3 shadow-none"
-                >
+                <li key={student.id} className="card flex items-center gap-4 p-3 shadow-none">
                   <div className="avatar">{initials(student.name)}</div>
 
                   <div className="min-w-0 flex-1">
@@ -266,7 +315,48 @@ export default function Home() {
                     <p className="text-xs text-muted">ID #{student.id}</p>
                   </div>
 
-                  <span className={scoreBadgeClass(student.score)}>{student.score}</span>
+                  {editingScoreId === student.id ? (
+                    <form
+                      className="flex items-center gap-1"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        saveScore(student);
+                      }}
+                    >
+                      <input
+                        type="number"
+                        autoFocus
+                        value={scoreDraft}
+                        onChange={(event) => setScoreDraft(event.target.value)}
+                        className="input"
+                        style={{ width: "4rem", padding: "0.3rem 0.5rem" }}
+                      />
+                      <button type="submit" className="icon-btn" aria-label="Save score">
+                        ✓
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingScoreId(null)}
+                        className="icon-btn"
+                        aria-label="Cancel edit"
+                      >
+                        ×
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      <span className={scoreBadgeClass(student.score)}>{student.score}</span>
+                      <button
+                        type="button"
+                        onClick={() => startEditScore(student)}
+                        className="icon-btn"
+                        aria-label={`Edit score for ${student.name}`}
+                        style={{ color: "var(--foreground)" }}
+                      >
+                        ✎
+                      </button>
+                    </>
+                  )}
 
                   <button
                     type="button"
