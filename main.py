@@ -30,8 +30,8 @@ DEFAULT_STUDENTS: List[Student] = [
 students: List[Student] = list(DEFAULT_STUDENTS)
 
 @app.get("/students", response_model=List[Student])
-async def get_students():
-    return students
+async def get_students(start: int | None = None, end: int | None = None):
+    return students[start:end]
 
 @app.get("/students/{student_id}", response_model=Student)
 async def get_student(student_id: int):
