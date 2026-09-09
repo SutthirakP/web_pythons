@@ -164,9 +164,14 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-bold tracking-tight">Products</h1>
           <p className="text-sm text-muted">Manage the product catalog</p>
         </div>
-        <Link href="/" className="text-sm text-muted hover:underline">
-          ← Students
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/" className="text-sm text-muted hover:underline">
+            ← Students
+          </Link>
+          <Link href="/catalog" className="text-sm text-muted hover:underline">
+            Catalog →
+          </Link>
+        </div>
       </header>
 
       {feedback && (
