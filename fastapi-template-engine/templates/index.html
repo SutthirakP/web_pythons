@@ -1,0 +1,50 @@
+{%  extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<section class = "sumarry">
+    <p>Items: <strong id="total-count">{{ items | length }}</strong></p>
+</section> 
+
+<form action="{{ url_for('add_item') }}" method="POST" class="add-item-form">
+    <input type="text" name="name" required>
+    <input type="number" name="amount" required>
+    <button type="submit">Add Item</button>
+</form>
+
+<table>
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Item Name</th>
+            <th>Amount</th>
+            <th>status</th>
+            <th>action</th>
+        </tr>
+    </thead>
+    <tbody id="items-list">
+        {% for item in items %}
+        <tr id="row-{{ item.id }}">
+            <td>{{ loop.index }}</td>
+            <td>{{ item.name | title }}</td>
+            <td>{{ item.amount }}</td>
+            <td>
+                {% if item.amount == 0 %}
+                    <span>No Item</span>
+                {% elif item.amount < 3 %}
+                    <span>Low</span>
+                {% endif %}
+            </td>
+            <td>
+                <button class="js-delete" data-id="{{ item.id }}">Del</button>
+            </td>
+        </tr>
+        {% else %}
+        <tr id="empty-row">
+            <td colspan="5">No items found.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
