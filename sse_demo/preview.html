@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Streaming Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f5f1;
+    --panel: #ffffff;
+    --ink: #201f1c;
+    --ink-soft: #6b6960;
+    --line: rgba(32, 31, 28, 0.12);
+    --normal: #6b6960;
+    --stream: #1f8f6b;
+    --cursor: #1f8f6b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181a;
+      --panel: #202224;
+      --ink: #ecece7;
+      --ink-soft: #9a988f;
+      --line: rgba(236, 236, 231, 0.14);
+      --normal: #9a988f;
+      --stream: #4fd6a8;
+      --cursor: #4fd6a8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Figtree", ui-sans-serif, system-ui, sans-serif;
+    padding-inline: 16px;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; padding-block: 32px 60px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--ink-soft); font-size: 13.5px; margin: 0 0 24px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .panel .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .panel .head strong { font-size: 14.5px; }
+  .panel .head span {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+  }
+  button {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12.5px;
+    padding: 7px 14px;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--ink-soft); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  #run-normal { border-color: var(--normal); }
+  #run-stream { border-color: var(--stream); color: var(--stream); font-weight: 600; }
+  .out {
+    min-height: 64px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 14px;
+    line-height: 1.7;
+    padding: 10px 4px 0;
+    color: var(--ink);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .out .cursor {
+    display: inline-block;
+    width: 8px; height: 15px;
+    background: var(--cursor);
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    animation: blink 0.9s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .timer {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: var(--ink-soft);
+    margin-top: 8px;
+  }
+  .err {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    color: #c0392b;
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>ปกติ vs Streaming</h1>
+  <p class="sub">เชื่อมกับ <code>http://127.0.0.1:8000</code> — เปิดไฟล์นี้ตรง ๆ ในเบราว์เซอร์ (ไม่ผ่าน Artifact) แล้วกดปุ่มดูผลจริง</p>
+
+  <div class="panel">
+    <div class="head">
+      <strong>ปกติ (รอครบก่อนค่อยส่ง)</strong>
+      <span>GET /normal</span>
+    </div>
+    <button id="run-normal">▶ รันแบบปกติ</button>
+    <div class="out" id="out-normal"></div>
+    <div class="timer" id="timer-normal"></div>
+  </div>
+
+  <div class="panel">
+    <div class="head">
+      <strong style="color:var(--stream)">Streaming (ทยอยส่งทีละคำ)</strong>
+      <span>GET /stream</span>
+    </div>
+    <button id="run-stream">▶ รันแบบ streaming</button>
+    <div class="out" id="out-stream"></div>
+    <div class="timer" id="timer-stream"></div>
+  </div>
+
+  <div class="err" id="err" hidden>
+    เชื่อมต่อ http://127.0.0.1:8000 ไม่ได้ — เช็คว่า uv run fastapi dev main.py ใน sse_demo/ ยังรันอยู่ไหม
+  </div>
+</div>
+
+<script>
+  const API = "http://127.0.0.1:8000";
+  const errBox = document.getElementById("err");
+
+  function showErr() { errBox.hidden = false; }
+
+  document.getElementById("run-normal").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const out = document.getElementById("out-normal");
+    const timer = document.getElementById("timer-normal");
+    btn.disabled = true;
+    out.textContent = "";
+    timer.textContent = "กำลังรอ...";
+    const start = performance.now();
+    try {
+      const res = await fetch(`${API}/normal`);
+      const data = await res.json();
+      out.textContent = data.message;
+      timer.textContent = `ใช้เวลา ${((performance.now() - start) / 1000).toFixed(2)}s ถึงจะเห็นตัวอักษรตัวแรก`;
+    } catch {
+      showErr();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("run-stream").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    const out = document.getElementById("out-stream");
+    const timer = document.getElementById("timer-stream");
+    btn.disabled = true;
+    out.innerHTML = '<span class="cursor"></span>';
+    const start = performance.now();
+    let firstChunk = null;
+    try {
+      const res = await fetch(`${API}/stream`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let text = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (firstChunk === null) firstChunk = performance.now();
+        text += decoder.decode(value, { stream: true });
+        out.innerHTML = text + '<span class="cursor"></span>';
+      }
+      out.innerHTML = text;
+      const firstS = ((firstChunk - start) / 1000).toFixed(2);
+      const totalS = ((performance.now() - start) / 1000).toFixed(2);
+      timer.textContent = `ตัวอักษรแรกเห็นใน ${firstS}s · จบทั้งหมดใน ${totalS}s`;
+    } catch {
+      showErr();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+
+</body>
+</html>
