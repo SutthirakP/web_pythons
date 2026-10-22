@@ -1,3 +1,4 @@
+from pathlib import Path
 from http.client import HTTPException
 
 from fastapi import Depends, FastAPI
@@ -6,7 +7,8 @@ from sqlalchemy import Column, Float, Integer, String, create_engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 
-sqlite_file_name = "database.db"
+# next to this file, so it works no matter where the server is started from
+sqlite_file_name = Path(__file__).resolve().parent / "database.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 
 connect_args = {"check_same_thread": False}

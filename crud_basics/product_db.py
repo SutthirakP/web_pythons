@@ -1,10 +1,12 @@
+from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import Column, Float, Integer, String, create_engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
-sqlite_file_name = "product.db"
+# next to this file, so it works no matter where the server is started from
+sqlite_file_name = Path(__file__).resolve().parent / "product.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 
 connect_args = {"check_same_thread": False}

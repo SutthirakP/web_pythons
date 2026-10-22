@@ -3,10 +3,20 @@
 __pycache__/
 *.pyc
 
-# Claude Code / agent tooling (kept locally, not published)
-.claude/
-.agents/
-
 # Next.js (frontend/.gitignore also covers this, kept here as a backstop)
 frontend/node_modules/
 frontend/.next/
+
+# Local databases - created automatically on first run, may hold user data
+*.db
+*.db.bak
+
+# Uploaded files (runtime data, not source)
+appm2m/uploads/
+upload/uploads/
+
+# Secrets
+.env
+
+# pip freeze dump - dependencies live in pyproject.toml / uv.lock
+/requirements.txt
