@@ -1,6 +1,8 @@
 "use client";
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import ChatWidget from "./ChatWidget";
+import ImagePicker from "./ImagePicker";
 
 type Category = {
   id: number;
@@ -12,6 +14,7 @@ type Product = {
   name: string;
   description: string | null;
   price: number;
+  image: string | null;
   categories: Category[];
 };
 
@@ -21,6 +24,11 @@ type Feedback = {
 };
 
 const API_URL = "http://127.0.0.1:8002";
+const TOKEN_STORAGE_KEY = "appm2m_token";
+
+function imageUrl(filename: string | null) {
+  return filename ? `${API_URL}/file/${filename}` : null;
+}
 
 function ChipToggle({
   label,
@@ -47,6 +55,8 @@ export default function CatalogPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  // bumped by the chat socket when anyone adds/edits/deletes a product -> refetch
+  const [reloadKey, setReloadKey] = useState(0);
 
   const [categoryName, setCategoryName] = useState("");
   const [addingCategory, setAddingCategory] = useState(false);
@@ -55,6 +65,7 @@ export default function CatalogPage() {
   const [productDescription, setProductDescription] = useState("");
   const [productPrice, setProductPrice] = useState("");
   const [productCategoryIds, setProductCategoryIds] = useState<number[]>([]);
+  const [productImage, setProductImage] = useState<File | null>(null);
   const [addingProduct, setAddingProduct] = useState(false);
 
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -63,7 +74,116 @@ export default function CatalogPage() {
     description: "",
     price: "",
     categoryIds: [] as number[],
+    image: null as string | null, // filename already saved on the product
   });
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const [token, setToken] = useState<string | null>(null);
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
+  const [registering, setRegistering] = useState(false);
+
+  // Restore a saved session on load (per-browser only, not shared).
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (saved) setToken(saved);
+    } catch {
+      // localStorage unavailable (private mode etc.) - just stay logged out.
+    }
+  }, []);
+
+  function authHeaders(): HeadersInit {
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  // LOG IN
+  async function login(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFeedback(null);
+    setLoggingIn(true);
+
+    try {
+      const body = new URLSearchParams();
+      body.set("username", loginUsername);
+      body.set("password", loginPassword);
+
+      const response = await fetch(`${API_URL}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.detail || "Login failed");
+      }
+
+      setToken(result.access_token);
+      try {
+        localStorage.setItem(TOKEN_STORAGE_KEY, result.access_token);
+      } catch {
+        // ignore - session just won't survive a refresh
+      }
+      setLoginPassword("");
+      setFeedback({ type: "success", text: `Logged in as ${loginUsername}` });
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Login failed";
+      setFeedback({ type: "error", text });
+    } finally {
+      setLoggingIn(false);
+    }
+  }
+
+  // REGISTER
+  async function register(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFeedback(null);
+    setRegistering(true);
+
+    try {
+      const response = await fetch(`${API_URL}/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.detail || "Registration failed");
+      }
+
+      setFeedback({ type: "success", text: `Account "${result.username}" created — now log in` });
+      setShowRegister(false);
+      setLoginPassword("");
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Registration failed";
+      setFeedback({ type: "error", text });
+    } finally {
+      setRegistering(false);
+    }
+  }
+
+  // LOG OUT
+  async function logout() {
+    try {
+      await fetch(`${API_URL}/logout`, { method: "POST", headers: authHeaders() });
+    } catch {
+      // token may already be stale - clear the local session anyway
+    }
+    setToken(null);
+    try {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    setFeedback({ type: "success", text: "Logged out" });
+  }
 
   // LOAD everything
   useEffect(() => {
@@ -89,10 +209,32 @@ export default function CatalogPage() {
     }
 
     load();
-  }, []);
+  }, [reloadKey]);
 
   function toggleId(ids: number[], id: number) {
     return ids.includes(id) ? ids.filter((existing) => existing !== id) : [...ids, id];
+  }
+
+  // UPLOAD image -> filename to store on the product (step 1 of 2, see appm2m/upload.py)
+  async function uploadImage(file: File): Promise<string> {
+    const form = new FormData();
+    form.append("file", file);
+
+    // no Content-Type header: the browser sets multipart/form-data with the boundary itself
+    const response = await fetch(`${API_URL}/upload`, {
+      method: "POST",
+      headers: authHeaders(),
+      body: form,
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      if (response.status === 401) throw new Error("Please log in first");
+      throw new Error(result.detail || "Failed to upload image");
+    }
+
+    return result.filename;
   }
 
   // CREATE category
@@ -104,13 +246,14 @@ export default function CatalogPage() {
     try {
       const response = await fetch(`${API_URL}/categories/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ name: categoryName }),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
+        if (response.status === 401) throw new Error("Please log in first");
         throw new Error(result.detail || "Failed to add category");
       }
 
@@ -132,9 +275,11 @@ export default function CatalogPage() {
     try {
       const response = await fetch(`${API_URL}/categories/${categoryId}`, {
         method: "DELETE",
+        headers: authHeaders(),
       });
 
       if (!response.ok) {
+        if (response.status === 401) throw new Error("Please log in first");
         const result = await response.json();
         throw new Error(result.detail || "Failed to delete category");
       }
@@ -160,13 +305,16 @@ export default function CatalogPage() {
     setAddingProduct(true);
 
     try {
+      const image = productImage ? await uploadImage(productImage) : null;
+
       const response = await fetch(`${API_URL}/products/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           name: productName,
           description: productDescription.trim() === "" ? null : productDescription,
           price: Number(productPrice),
+          image,
           category_ids: productCategoryIds,
         }),
       });
@@ -174,6 +322,7 @@ export default function CatalogPage() {
       const result = await response.json();
 
       if (!response.ok) {
+        if (response.status === 401) throw new Error("Please log in first");
         throw new Error(result.detail || "Failed to add product");
       }
 
@@ -183,6 +332,7 @@ export default function CatalogPage() {
       setProductDescription("");
       setProductPrice("");
       setProductCategoryIds([]);
+      setProductImage(null);
     } catch (error) {
       const text = error instanceof Error ? error.message : "Failed to add product";
       setFeedback({ type: "error", text });
@@ -198,9 +348,11 @@ export default function CatalogPage() {
     try {
       const response = await fetch(`${API_URL}/products/${productId}`, {
         method: "DELETE",
+        headers: authHeaders(),
       });
 
       if (!response.ok) {
+        if (response.status === 401) throw new Error("Please log in first");
         const result = await response.json();
         throw new Error(result.detail || "Failed to delete product");
       }
@@ -222,7 +374,9 @@ export default function CatalogPage() {
       description: product.description ?? "",
       price: String(product.price),
       categoryIds: product.categories.map((category) => category.id),
+      image: product.image,
     });
+    setEditImageFile(null);
   }
 
   async function saveEdit(productId: number) {
@@ -233,15 +387,19 @@ export default function CatalogPage() {
     }
 
     setFeedback(null);
+    setSavingEdit(true);
 
     try {
+      const image = editImageFile ? await uploadImage(editImageFile) : editDraft.image;
+
       const response = await fetch(`${API_URL}/products/${productId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({
           name: editDraft.name,
           description: editDraft.description.trim() === "" ? null : editDraft.description,
           price: newPrice,
+          image,
           category_ids: editDraft.categoryIds,
         }),
       });
@@ -249,6 +407,7 @@ export default function CatalogPage() {
       const result = await response.json();
 
       if (!response.ok) {
+        if (response.status === 401) throw new Error("Please log in first");
         throw new Error(result.detail || "Failed to update product");
       }
 
@@ -257,9 +416,12 @@ export default function CatalogPage() {
       );
       setFeedback({ type: "success", text: "Product updated" });
       setEditingId(null);
+      setEditImageFile(null);
     } catch (error) {
       const text = error instanceof Error ? error.message : "Failed to update product";
       setFeedback({ type: "error", text });
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -270,10 +432,97 @@ export default function CatalogPage() {
           <h1 className="text-2xl font-bold tracking-tight">Catalog</h1>
           <p className="text-sm text-muted">Products and categories (many-to-many)</p>
         </div>
-        <Link href="/products" className="text-sm text-muted hover:underline">
-          ← Products
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/products" className="text-sm text-muted hover:underline">
+            ← Products
+          </Link>
+          <Link href="/graphql-shop" className="text-sm text-muted hover:underline">
+            GraphQL Shop →
+          </Link>
+        </div>
       </header>
+
+      <section className="card p-4">
+        {token ? (
+          <div className="flex items-center justify-between">
+            <span className="text-sm">🔓 Logged in — add/edit/delete unlocked</span>
+            <button
+              type="button"
+              onClick={logout}
+              className="btn btn-ghost"
+              style={{ width: "auto" }}
+            >
+              Log out
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <form
+              onSubmit={showRegister ? register : login}
+              className="flex flex-wrap items-end gap-3"
+            >
+              <div>
+                <label className="field-label" htmlFor="login-username">
+                  Username
+                </label>
+                <input
+                  id="login-username"
+                  type="text"
+                  placeholder="admin"
+                  value={loginUsername}
+                  onChange={(event) => setLoginUsername(event.target.value)}
+                  required
+                  className="input"
+                  style={{ width: "10rem" }}
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="login-password">
+                  Password
+                </label>
+                <input
+                  id="login-password"
+                  type="password"
+                  placeholder="••••"
+                  value={loginPassword}
+                  onChange={(event) => setLoginPassword(event.target.value)}
+                  required
+                  className="input"
+                  style={{ width: "10rem" }}
+                />
+              </div>
+              {showRegister ? (
+                <button
+                  type="submit"
+                  disabled={registering}
+                  className="btn btn-primary"
+                  style={{ width: "auto" }}
+                >
+                  {registering ? "Creating…" : "Create account"}
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={loggingIn}
+                  className="btn btn-primary"
+                  style={{ width: "auto" }}
+                >
+                  {loggingIn ? "Logging in…" : "Log in"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowRegister((value) => !value)}
+                className="btn btn-ghost"
+                style={{ width: "auto" }}
+              >
+                {showRegister ? "Have an account? Log in" : "New here? Register"}
+              </button>
+            </form>
+            <span className="text-xs text-muted">Adding, editing, or deleting requires login</span>
+          </div>
+        )}
+      </section>
 
       {feedback && (
         <div
@@ -304,8 +553,12 @@ export default function CatalogPage() {
                   className="input"
                 />
               </div>
-              <button type="submit" disabled={addingCategory} className="btn btn-primary">
-                {addingCategory ? "Adding…" : "+ Add category"}
+              <button
+                type="submit"
+                disabled={addingCategory || !token}
+                className="btn btn-primary"
+              >
+                {addingCategory ? "Adding…" : token ? "+ Add category" : "Log in to add"}
               </button>
             </form>
 
@@ -382,6 +635,20 @@ export default function CatalogPage() {
               </div>
 
               <div>
+                <label className="field-label" htmlFor="product-image">
+                  Image
+                </label>
+                <ImagePicker
+                  id="product-image"
+                  file={productImage}
+                  currentUrl={null}
+                  onPick={setProductImage}
+                  onClear={() => setProductImage(null)}
+                  onError={(text) => setFeedback({ type: "error", text })}
+                />
+              </div>
+
+              <div>
                 <span className="field-label">Categories</span>
                 {categories.length === 0 ? (
                   <p className="text-xs text-muted">Add a category first.</p>
@@ -401,8 +668,12 @@ export default function CatalogPage() {
                 )}
               </div>
 
-              <button type="submit" disabled={addingProduct} className="btn btn-primary">
-                {addingProduct ? "Adding…" : "+ Add product"}
+              <button
+                type="submit"
+                disabled={addingProduct || !token}
+                className="btn btn-primary"
+              >
+                {addingProduct ? "Adding…" : token ? "+ Add product" : "Log in to add"}
               </button>
             </form>
           </section>
@@ -429,6 +700,18 @@ export default function CatalogPage() {
               {products.map((product) =>
                 editingId === product.id ? (
                   <li key={product.id} className="card flex flex-col gap-3 p-3 shadow-none">
+                    <ImagePicker
+                      id={`edit-image-${product.id}`}
+                      compact
+                      file={editImageFile}
+                      currentUrl={imageUrl(editDraft.image)}
+                      onPick={setEditImageFile}
+                      onClear={() => {
+                        setEditImageFile(null);
+                        setEditDraft((draft) => ({ ...draft, image: null }));
+                      }}
+                      onError={(text) => setFeedback({ type: "error", text })}
+                    />
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <input
                         value={editDraft.name}
@@ -481,7 +764,10 @@ export default function CatalogPage() {
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
-                        onClick={() => setEditingId(null)}
+                        onClick={() => {
+                          setEditingId(null);
+                          setEditImageFile(null);
+                        }}
                         className="btn btn-ghost"
                       >
                         Cancel
@@ -489,16 +775,33 @@ export default function CatalogPage() {
                       <button
                         type="button"
                         onClick={() => saveEdit(product.id)}
+                        disabled={!token || savingEdit}
                         className="btn btn-primary"
                         style={{ width: "auto" }}
                       >
-                        Save
+                        {!token ? "Log in to save" : savingEdit ? "Saving…" : "Save"}
                       </button>
                     </div>
                   </li>
                 ) : (
                   <li key={product.id} className="card flex flex-col gap-2 p-3 shadow-none">
                     <div className="flex items-center gap-4">
+                      {product.image ? (
+                        <a
+                          href={imageUrl(product.image) ?? undefined}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="product-thumb"
+                          title="Open full image"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element -- served by the FastAPI backend */}
+                          <img src={imageUrl(product.image) ?? undefined} alt={product.name} />
+                        </a>
+                      ) : (
+                        <div className="product-thumb empty" aria-hidden="true">
+                          🏷️
+                        </div>
+                      )}
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{product.name}</p>
                         <p className="truncate text-xs text-muted">
@@ -544,6 +847,8 @@ export default function CatalogPage() {
           )}
         </section>
       </div>
+
+      <ChatWidget onCatalogChanged={() => setReloadKey((key) => key + 1)} />
     </main>
   );
 }
