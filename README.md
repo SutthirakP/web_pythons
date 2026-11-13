@@ -1,185 +1,185 @@
-# 🐍 web_pythons — สมุดบันทึกการเรียน FastAPI
+# 🐍 web_pythons — FastAPI Learning Journal
 
-> รวมงานและการบ้านวิชาเขียนเว็บด้วย Python
-> ตั้งแต่ CRUD พื้นฐาน → ฐานข้อมูลและความสัมพันธ์ → Login → GraphQL / WebSocket / Streaming → Lifespan, Testing, Rate limit, CORS, Cookie
+> Homework and class projects from a Python web development course.
+> From basic CRUD → databases and relationships → login → GraphQL / WebSocket / Streaming → Lifespan, Testing, Rate limiting, CORS and Cookies.
 
 <br>
 
-## 📑 สารบัญ
+## 📑 Table of Contents
 
-1. [ภาพรวมโปรเจกต์](#-ภาพรวมโปรเจกต์)
-2. [เทคโนโลยีที่ใช้](#-เทคโนโลยีที่ใช้)
-3. [ระบบทั้งหมด (Backend)](#-ระบบทั้งหมด-backend)
-4. [หน้าเว็บ (Frontend)](#-หน้าเว็บ-frontend)
-5. [ฐานข้อมูล (SQL / Redis)](#-ฐานข้อมูล-sql--redis)
-6. [โปรเจกต์หลัก: Catalog](#-โปรเจกต์หลัก-catalog)
-7. [การติดตั้ง](#-การติดตั้ง)
-8. [การรัน](#-การรัน)
-9. [ไฟล์ที่จำเป็นต้องมี](#-ไฟล์ที่จำเป็นต้องมี)
-10. [โครงสร้างโฟลเดอร์](#-โครงสร้างโฟลเดอร์)
-11. [แผนต่อไป](#-แผนต่อไป)
+1. [Overview](#-overview)
+2. [Tech Stack](#-tech-stack)
+3. [Backend Systems](#-backend-systems)
+4. [Frontend Pages](#-frontend-pages)
+5. [Databases (SQL / Redis)](#-databases-sql--redis)
+6. [Main Project: Catalog](#-main-project-catalog)
+7. [Installation](#-installation)
+8. [Running the Project](#-running-the-project)
+9. [Required Files](#-required-files)
+10. [Folder Structure](#-folder-structure)
+11. [Next Steps](#-next-steps)
 
 <br>
 
 ---
 
-## 🧭 ภาพรวมโปรเจกต์
+## 🧭 Overview
 
-โปรเจกต์นี้มี **3 ส่วน** ทำงานร่วมกัน
+The project has **3 parts** that work together.
 
-| ส่วน | คืออะไร | อยู่ที่ |
+| Part | What it is | Where |
 |---|---|---|
-| **Backend** | API หลายตัวเขียนด้วย **FastAPI** แยกตามหัวข้อที่เรียน แต่ละตัวรันคนละพอร์ต | โฟลเดอร์ระดับบนสุด (`appm2m/`, `graphql_demo/`, …) |
-| **Frontend** | หน้าเว็บ **Next.js + React** ที่เรียก API ข้างบน | `frontend/` |
-| **ฐานข้อมูล** | **SQLite** (ไฟล์ `.db` แยกต่อแอป) + **Redis** (ผ่าน Docker) | สร้างอัตโนมัติตอนรันครั้งแรก |
+| **Backend** | Several **FastAPI** apps, one per topic, each running on its own port | Top-level folders (`appm2m/`, `graphql_demo/`, …) |
+| **Frontend** | **Next.js + React** web pages that call the APIs above | `frontend/` |
+| **Databases** | **SQLite** (one `.db` file per app) + **Redis** (via Docker) | Created automatically on first run |
 
 <br>
 
 ---
 
-## 🛠 เทคโนโลยีที่ใช้
+## 🛠 Tech Stack
 
-| ด้าน | เครื่องมือ |
+| Area | Tools |
 |---|---|
-| ภาษา | Python 3.12+, TypeScript |
+| Languages | Python 3.12+, TypeScript |
 | Backend framework | FastAPI, Uvicorn, Pydantic |
-| ฐานข้อมูล | SQLite + SQLAlchemy (ORM), aiosqlite, Redis |
-| Login / ความปลอดภัย | JWT (PyJWT), bcrypt / pwdlib, HttpOnly Cookie, CORS |
-| API แบบอื่น | GraphQL (Strawberry), WebSocket, Server-Sent Events |
-| AI | TensorFlow / Keras (โมเดลจาก Teachable Machine), Pillow |
-| Template | Jinja2 |
-| Rate limit | slowapi, Redis `INCR` + `EXPIRE` |
+| Databases | SQLite + SQLAlchemy (ORM), aiosqlite, Redis |
+| Auth / security | JWT (PyJWT), bcrypt / pwdlib, HttpOnly cookies, CORS |
+| Other API styles | GraphQL (Strawberry), WebSocket, Server-Sent Events |
+| AI | TensorFlow / Keras (Teachable Machine model), Pillow |
+| Templates | Jinja2 |
+| Rate limiting | slowapi, Redis `INCR` + `EXPIRE` |
 | Frontend | Next.js 16, React 19, Tailwind CSS 4 |
-| Test | pytest + FastAPI `TestClient` |
-| เครื่องมือ | uv (จัดการ Python package), Docker (Redis), npm |
+| Testing | pytest + FastAPI `TestClient` |
+| Tooling | uv (Python packages), Docker (Redis), npm |
 
 <br>
 
 ---
 
-## ⚙️ ระบบทั้งหมด (Backend)
+## ⚙️ Backend Systems
 
-เรียงตามลำดับที่เรียน — แต่ละโฟลเดอร์มี `README.md` อธิบายละเอียด
+Listed in the order they were learned — every folder has its own `README.md` with details.
 
-| # | โฟลเดอร์ | ระบบ | สิ่งที่ได้เรียน | พอร์ต |
+| # | Folder | System | What it teaches | Port |
 |:-:|---|---|---|:-:|
-| 1 | [`crud_basics/`](crud_basics/) | นักศึกษา / สินค้า | GET · POST · PUT · DELETE, Pydantic, เก็บใน list → SQLite | 8000 · 8001 · 8004 |
-| 2 | [`appv/`](appv/) | นักศึกษา ↔ เบอร์โทร | **One-to-many** (`ForeignKey` + `relationship`) | 8003 |
-| 3 | [`appm2m/`](appm2m/) | **Catalog (โปรเจกต์หลัก)** | Many-to-many + ทุกการบ้านหลังจากนั้น — [ดูด้านล่าง](#-โปรเจกต์หลัก-catalog) | 8002 |
-| 4 | [`jwt/`](jwt/) | Login ตัวแรก | สร้าง/ตรวจ JWT, hash รหัสผ่าน, logout ด้วย blacklist | 8007 |
-| 5 | [`image_process/`](image_process/) | AI ทายรูปภาพ | โหลดโมเดล Keras แล้วเปิดเป็น API `/predict` | 8006 |
-| 6 | [`sse_demo/`](sse_demo/) | Streaming | `StreamingResponse` ส่งทีละคำ, Pydantic Settings + `.env` | 8000 |
-| 7 | [`graphql_demo/`](graphql_demo/) | ร้านค้า GraphQL | Query / Mutation ด้วย Strawberry + SQLite | 8005 |
-| 8 | [`websocket/`](websocket/) | แจ้งเตือนสินค้า | WebSocket, `ConnectionManager`, broadcast | 8000 |
-| 9 | [`upload/`](upload/) | อัปโหลดไฟล์ | `UploadFile`, ตั้งชื่อด้วย `uuid4`, `FileResponse` | 8000 |
-| 10 | [`fast-lifespan-demo/`](fast-lifespan-demo/) | Lifespan + Test | โหลดโมเดล/เปิด DB ครั้งเดียว, `TestClient` แบบ `with` | 8000 |
-| 11 | [`fastapi-latelimits-demo/`](fastapi-latelimits-demo/) | Rate limit + Cache | slowapi, เขียน limiter เองด้วย Redis, cache ผลลัพธ์ | 8000 |
-| 12 | [`reservation-demo/`](reservation-demo/) | จองสินค้าชิ้นสุดท้าย | `asyncio.Lock` กัน race condition, จองชั่วคราว 30 วิ | 8000 |
-| 13 | [`fastapi-template-engine/`](fastapi-template-engine/) | Dashboard HTML | Jinja2: `extends` / `block` / `include`, ฟอร์ม + static | 8000 |
-| 14 | [`fastapi_validation_lesson/`](fastapi_validation_lesson/) | ตรวจข้อมูลสินค้า | `Field`, `field_validator`, `model_validator` | 8000 |
-| 15 | [`cookie/`](cookie/) | จำชื่อผู้ใช้ | `set_cookie`, `Cookie()`, `delete_cookie`, session ID | 8000 |
+| 1 | [`crud_basics/`](crud_basics/) | Students / Products | GET · POST · PUT · DELETE, Pydantic, in-memory list → SQLite | 8000 · 8001 · 8004 |
+| 2 | [`appv/`](appv/) | Students ↔ Phone numbers | **One-to-many** (`ForeignKey` + `relationship`) | 8003 |
+| 3 | [`appm2m/`](appm2m/) | **Catalog (main project)** | Many-to-many + every later homework — [see below](#-main-project-catalog) | 8002 |
+| 4 | [`jwt/`](jwt/) | First login system | Create/verify JWT, password hashing, logout with a blacklist | 8007 |
+| 5 | [`image_process/`](image_process/) | AI image prediction | Load a Keras model and serve it as `/predict` | 8006 |
+| 6 | [`sse_demo/`](sse_demo/) | Streaming | `StreamingResponse` word by word, Pydantic Settings + `.env` | 8000 |
+| 7 | [`graphql_demo/`](graphql_demo/) | GraphQL shop | Queries / mutations with Strawberry + SQLite | 8005 |
+| 8 | [`websocket/`](websocket/) | Product notifications | WebSocket, `ConnectionManager`, broadcast | 8000 |
+| 9 | [`upload/`](upload/) | File upload | `UploadFile`, `uuid4` file names, `FileResponse` | 8000 |
+| 10 | [`fast-lifespan-demo/`](fast-lifespan-demo/) | Lifespan + tests | Load a model / open a DB once, `TestClient` with `with` | 8000 |
+| 11 | [`fastapi-latelimits-demo/`](fastapi-latelimits-demo/) | Rate limit + cache | slowapi, a hand-written Redis limiter, response caching | 8000 |
+| 12 | [`reservation-demo/`](reservation-demo/) | Last-item reservation | `asyncio.Lock` against race conditions, 30-second hold | 8000 |
+| 13 | [`fastapi-template-engine/`](fastapi-template-engine/) | HTML dashboard | Jinja2: `extends` / `block` / `include`, forms + static files | 8000 |
+| 14 | [`fastapi_validation_lesson/`](fastapi_validation_lesson/) | Product validation | `Field`, `field_validator`, `model_validator` | 8000 |
+| 15 | [`cookie/`](cookie/) | Remember the user | `set_cookie`, `Cookie()`, `delete_cookie`, session ID | 8000 |
 
-> ตัวที่ใช้พอร์ต **8000** เป็น demo แยก ให้เปิด **ทีละตัว**
+> The demos on port **8000** are separate apps — run **one at a time**.
 
 <br>
 
 ---
 
-## 🖥 หน้าเว็บ (Frontend)
+## 🖥 Frontend Pages
 
-Next.js อยู่ใน [`frontend/`](frontend/) — เปิดที่ **http://localhost:3000**
+The Next.js app lives in [`frontend/`](frontend/) — open **http://localhost:3000**
 
-| หน้า | ใช้ Backend | ทำอะไรได้ |
+| Page | Backend | What you can do |
 |---|---|---|
-| `/` | `crud_basics/main.py` (8000) | จัดการรายชื่อนักศึกษาและคะแนน |
-| `/products` | `crud_basics/product_db.py` (8001) | เพิ่ม / แก้ / ลบสินค้าใน SQLite |
-| `/catalog` | `appm2m` (8002) | **หน้าหลัก** — สินค้า + หมวดหมู่ + รูป + login + แชทบอท + ทดสอบ CORS + ✨ streaming |
-| `/graphql-shop` | `graphql_demo` (8005) | ร้านค้าที่เรียกผ่าน GraphQL |
+| `/` | `crud_basics/main.py` (8000) | Manage students and scores |
+| `/products` | `crud_basics/product_db.py` (8001) | Add / edit / delete products stored in SQLite |
+| `/catalog` | `appm2m` (8002) | **Main page** — products + categories + images + login + chatbot + CORS test + ✨ streaming |
+| `/graphql-shop` | `graphql_demo` (8005) | A shop that talks to the API through GraphQL |
 
-> ⚠️ เปิดด้วย **`localhost`** ไม่ใช่ `127.0.0.1` — cookie login ของ `/catalog` ต้องเป็น site เดียวกับ backend
+> ⚠️ Open the site with **`localhost`**, not `127.0.0.1` — the `/catalog` login cookie only works when the page and the API are on the same site.
 
 <br>
 
 ---
 
-## 🗄 ฐานข้อมูล (SQL / Redis)
+## 🗄 Databases (SQL / Redis)
 
-ไฟล์ `.db` **ไม่ได้อยู่ใน repo** (อาจมีข้อมูลผู้ใช้) — แต่ละแอปสร้างไฟล์และตารางให้เองตอนรันครั้งแรก
+`.db` files are **not in the repository** (they may contain user data). Each app creates its file and tables on first run.
 
 ### SQLite
 
-| ไฟล์ฐานข้อมูล | แอป | ตาราง | ความสัมพันธ์ |
+| Database file | App | Tables | Relationship |
 |---|---|---|---|
 | `crud_basics/database.db` | student_db | `students` | — |
 | `crud_basics/product.db` | product_db | `products` | — |
-| `appv/database.db` | appv | `students`, `phones` | **1 : N** — นักศึกษา 1 คนมีหลายเบอร์ |
-| `appm2m/catalog.db` | Catalog | `products`, `categories`, `product_categories`, `users` | **N : M** — สินค้า ↔ หมวดหมู่ ผ่านตารางกลาง |
-| `graphql_demo/graphql.db` | GraphQL | `products`, `freed_ids` | `freed_ids` จำ id ที่ถูกลบไว้ใช้ซ้ำ |
-| `fast-lifespan-demo/app.db` | Lifespan | `predictions_logs` | — (เขียน SQL ตรงด้วย aiosqlite) |
+| `appv/database.db` | appv | `students`, `phones` | **1 : N** — one student has many phone numbers |
+| `appm2m/catalog.db` | Catalog | `products`, `categories`, `product_categories`, `users` | **N : M** — products ↔ categories through a join table |
+| `graphql_demo/graphql.db` | GraphQL | `products`, `freed_ids` | `freed_ids` remembers deleted ids for reuse |
+| `fast-lifespan-demo/app.db` | Lifespan | `predictions_logs` | — (raw SQL with aiosqlite) |
 
 ### Redis
 
-| ใช้ทำอะไร | Key | หมดอายุ |
+| Used for | Key | Expires after |
 |---|---|---|
-| นับจำนวน login (rate limit) | `rate:login:<ip>` | 60 วินาที |
-| เก็บ session ของ cookie login | `session:<random id>` | 1 ชั่วโมง / 7 วัน (Remember me) |
-| ตัวอย่าง cache / rate limit | `rate:…`, `cache:slow-data` | 30–60 วินาที |
+| Counting login attempts (rate limit) | `rate:login:<ip>` | 60 seconds |
+| Cookie login sessions | `session:<random id>` | 1 hour / 7 days ("Remember me") |
+| Cache / rate-limit demos | `rate:…`, `cache:slow-data` | 30–60 seconds |
 
 <br>
 
 ---
 
-## ⭐ โปรเจกต์หลัก: Catalog
+## ⭐ Main Project: Catalog
 
-ทุกการบ้านตั้งแต่ many-to-many ถูกต่อยอดลงในโปรเจกต์เดียว — [`appm2m/`](appm2m/) + หน้า `/catalog`
+Every homework from many-to-many onwards was built into one project — [`appm2m/`](appm2m/) + the `/catalog` page.
 
-| ระบบ | ไฟล์ | ทำอะไร |
+| Feature | Files | What it does |
 |---|---|---|
-| สินค้า ↔ หมวดหมู่ | `models.py`, `main.py` | CRUD สินค้า/หมวดหมู่แบบ many-to-many |
-| สมัคร / Login | `auth.py` | hash รหัสผ่านด้วย bcrypt, ออก JWT, เพิ่ม/แก้/ลบได้เฉพาะคนที่ login |
-| Cookie login | `session.py`, `auth.py` | จำสถานะ login ด้วย HttpOnly cookie, ติ๊ก **Remember me** ได้, `GET /me` |
-| อัปโหลดรูปสินค้า | `upload.py` | ตรวจชนิด/ขนาดไฟล์, ตั้งชื่อสุ่ม, กัน `../` |
-| แชทบอท | `chatbot.py` | WebSocket ตอบทีละคำ, แจ้งเตือนทุกคนเมื่อสินค้าเปลี่ยน |
-| ✨ เขียนคำอธิบายสินค้า | `streaming.py` | Server-Sent Events ส่งข้อความทีละคำ |
-| CORS | `cors.py` | อนุญาตทุก method ยกเว้น HEAD + ปุ่มทดสอบบนหน้าเว็บ |
-| Rate limit | `rate_limit.py` | login ได้ 5 ครั้ง/นาที นับใน Redis |
-| Lifespan | `main.py` | สร้างตาราง + ทดสอบต่อ DB/Redis ตอนเปิด server, `GET /health` |
-| Test | `conftest.py`, `test_main.py` | **40 test** ด้วย pytest (ใช้ DB ชั่วคราว ไม่แตะข้อมูลจริง) |
+| Products ↔ categories | `models.py`, `main.py` | Many-to-many CRUD for products and categories |
+| Register / login | `auth.py` | bcrypt password hashing, JWT, only logged-in users can add/edit/delete |
+| Cookie login | `session.py`, `auth.py` | HttpOnly session cookie, **Remember me** option, `GET /me` |
+| Product images | `upload.py` | Checks file type/size, random file names, blocks `../` |
+| Chatbot | `chatbot.py` | WebSocket replies word by word, notifies everyone when a product changes |
+| ✨ Product description writer | `streaming.py` | Server-Sent Events stream the text word by word |
+| CORS | `cors.py` | Allows every method except HEAD, with a test button on the page |
+| Rate limit | `rate_limit.py` | 5 login attempts per minute, counted in Redis |
+| Lifespan | `main.py` | Creates tables and checks the DB/Redis connection at startup, `GET /health` |
+| Tests | `conftest.py`, `test_main.py` | **40 pytest tests** (temporary database, real data untouched) |
 
-คู่มือแต่ละเรื่อง: [`RATE_LIMIT.md`](appm2m/RATE_LIMIT.md) · [`CORS_STREAMING.md`](appm2m/CORS_STREAMING.md) · [`COOKIE.md`](appm2m/COOKIE.md) · [`TESTING.md`](fast-lifespan-demo/TESTING.md)
+Guides (in Thai): [`RATE_LIMIT.md`](appm2m/RATE_LIMIT.md) · [`CORS_STREAMING.md`](appm2m/CORS_STREAMING.md) · [`COOKIE.md`](appm2m/COOKIE.md) · [`TESTING.md`](fast-lifespan-demo/TESTING.md)
 
 <br>
 
 ---
 
-## 📦 การติดตั้ง
+## 📦 Installation
 
-### 1. สิ่งที่ต้องมีในเครื่อง
+### 1. Prerequisites
 
-| โปรแกรม | เวอร์ชัน | ใช้ทำอะไร | ดาวน์โหลด |
+| Program | Version | Used for | Download |
 |---|---|---|---|
-| **Python** | 3.12 ขึ้นไป | รัน backend | https://www.python.org/downloads/ |
-| **uv** | ล่าสุด | ติดตั้ง package ของ Python | https://docs.astral.sh/uv/ |
-| **Node.js** | 20 ขึ้นไป | รันหน้าเว็บ | https://nodejs.org/ |
-| **Docker Desktop** | ล่าสุด | รัน Redis | https://www.docker.com/products/docker-desktop/ |
-| Git | — | ดึงโค้ด | https://git-scm.com/ |
+| **Python** | 3.12 or newer | Running the backend | https://www.python.org/downloads/ |
+| **uv** | latest | Installing Python packages | https://docs.astral.sh/uv/ |
+| **Node.js** | 20 or newer | Running the frontend | https://nodejs.org/ |
+| **Docker Desktop** | latest | Running Redis | https://www.docker.com/products/docker-desktop/ |
+| Git | — | Getting the code | https://git-scm.com/ |
 
-### 2. ดึงโค้ด
+### 2. Clone the repository
 
 ```powershell
 git clone https://github.com/SutthirakP/web_pythons.git
 cd web_pythons
 ```
 
-### 3. ติดตั้ง Backend (Python)
+### 3. Install the backend (Python)
 
 ```powershell
 uv sync
 ```
 
-คำสั่งเดียวสร้าง `.venv` และติดตั้งทุก package ตาม `pyproject.toml` + `uv.lock` (รวม `pytest` สำหรับ test)
+One command creates `.venv` and installs every package from `pyproject.toml` + `uv.lock` (including `pytest`).
 
-### 4. ติดตั้ง Frontend
+### 4. Install the frontend
 
 ```powershell
 cd frontend
@@ -187,116 +187,116 @@ npm install
 cd ..
 ```
 
-### 5. สร้าง Redis (ครั้งแรกครั้งเดียว)
+### 5. Create Redis (first time only)
 
 ```powershell
 docker run -d --name my-radis -p 6379:6379 --restart unless-stopped redis:7
-docker exec -it my-radis redis-cli ping      # ต้องได้ PONG
+docker exec -it my-radis redis-cli ping      # should print PONG
 ```
 
-> `--restart unless-stopped` = เปิด Docker Desktop เมื่อไหร่ Redis เปิดตามเอง
+> `--restart unless-stopped` = Redis starts automatically whenever Docker Desktop opens.
 
-### 6. ตั้งค่า `.env` (เฉพาะ `sse_demo`)
+### 6. Set up `.env` (only for `sse_demo`)
 
 ```powershell
 copy sse_demo\.env.example sse_demo\.env
 ```
 
-แล้วแก้ `SECRET_KEY` ในไฟล์ `.env` — ไฟล์นี้ **ห้าม commit**
+Then change `SECRET_KEY` in `.env` — this file must **never be committed**.
 
 <br>
 
 ---
 
-## ▶️ การรัน
+## ▶️ Running the Project
 
-### เปิด Backend หลักทั้งหมดในคำสั่งเดียว
+### Start all main backends with one command
 
 ```powershell
 uv run python run_all.py
 ```
 
-เปิดพอร์ต **8000 – 8005** พร้อมกัน และเช็ค/เปิด Redis ให้อัตโนมัติ (ต้องเปิด Docker Desktop ไว้) · กด `Ctrl+C` ปิดทั้งหมด
+Starts ports **8000 – 8005** together and checks/starts Redis for you (Docker Desktop must be open). Press `Ctrl+C` to stop everything.
 
-### เปิดหน้าเว็บ
+### Start the frontend
 
 ```powershell
 cd frontend
 npm run dev
 ```
 
-แล้วเข้า **http://localhost:3000/catalog**
+Then open **http://localhost:3000/catalog**
 
-### รันทีละตัว / ทดสอบ
+### Run one app / run the tests
 
 ```powershell
-uv run fastapi dev appm2m/main.py --port 8002     # Catalog ตัวเดียว
-uv run pytest appm2m -v                            # test ของ Catalog (ต้องเปิด Redis)
+uv run fastapi dev appm2m/main.py --port 8002     # Catalog only
+uv run pytest appm2m -v                            # Catalog tests (Redis must be running)
 ```
 
-- ทุก backend มีหน้าทดสอบ API ที่ `http://127.0.0.1:<พอร์ต>/docs`
-- คำสั่งครบทุกตัว + ตารางพอร์ต + วิธีแก้ปัญหา อยู่ใน **[RUN.md](RUN.md)**
+- Every backend has an interactive API page at `http://127.0.0.1:<port>/docs`
+- All commands, the full port table and troubleshooting tips are in **[RUN.md](RUN.md)** (Thai)
 
 <br>
 
 ---
 
-## 📋 ไฟล์ที่จำเป็นต้องมี
+## 📋 Required Files
 
-| ไฟล์ | หน้าที่ | ถ้าไม่มี |
+| File | Purpose | Without it |
 |---|---|---|
-| `pyproject.toml` | รายชื่อ package ของ Python | `uv sync` ไม่รู้จะติดตั้งอะไร |
-| `uv.lock` | ล็อกเวอร์ชันให้ทุกเครื่องเหมือนกัน | อาจได้เวอร์ชันที่ไม่เข้ากัน |
-| `run_all.py` | เปิด backend หลักทั้งหมด + Redis | ต้องเปิดทีละตัวเอง |
-| `frontend/package.json` + `package-lock.json` | package ของหน้าเว็บ | `npm install` ไม่ได้ |
-| `image_process/model/keras_model.h5` + `labels.txt` | โมเดล AI ที่เทรนแล้ว | `/predict` ใช้ไม่ได้ |
-| `sse_demo/.env` | เก็บ `SECRET_KEY` | ใช้ค่า default (ใช้ได้แค่ตอนพัฒนา) |
-| Redis container `my-radis` | rate limit + session login | login หน้า `/catalog` ได้ **503** |
+| `pyproject.toml` | List of Python packages | `uv sync` doesn't know what to install |
+| `uv.lock` | Locks exact versions so every machine matches | You may get incompatible versions |
+| `run_all.py` | Starts all main backends + Redis | You must start each app by hand |
+| `frontend/package.json` + `package-lock.json` | Frontend packages | `npm install` fails |
+| `image_process/model/keras_model.h5` + `labels.txt` | The trained AI model | `/predict` doesn't work |
+| `sse_demo/.env` | Stores `SECRET_KEY` | Falls back to a default (development only) |
+| Redis container `my-radis` | Rate limiting + login sessions | `/catalog` login returns **503** |
 
-**ไม่ได้อยู่ใน repo (ตั้งใจ):** ไฟล์ `*.db` · รูปที่อัปโหลด (`uploads/`) · `.env` · `.venv/` · `node_modules/` — ทั้งหมดถูกสร้างใหม่ตอนติดตั้ง/รัน
+**Intentionally not in the repository:** `*.db` files · uploaded images (`uploads/`) · `.env` · `.venv/` · `node_modules/` — they are all recreated during installation or at runtime.
 
 <br>
 
 ---
 
-## 🗂 โครงสร้างโฟลเดอร์
+## 🗂 Folder Structure
 
 ```
 web_pythons/
-├── appm2m/                    ⭐ Catalog — โปรเจกต์หลัก (many-to-many + การบ้านทั้งหมด)
+├── appm2m/                    ⭐ Catalog — main project (many-to-many + all homework)
 ├── appv/                      one-to-many
-├── crud_basics/               CRUD พื้นฐาน (list → SQLite)
-├── jwt/                       login ด้วย JWT ตัวแรก
+├── crud_basics/               basic CRUD (list → SQLite)
+├── jwt/                       first JWT login
 ├── graphql_demo/              GraphQL + SQLite
-├── websocket/                 WebSocket แจ้งเตือน
-├── sse_demo/                  Streaming response
-├── upload/                    อัปโหลดไฟล์
-├── image_process/             AI ทายรูป (Keras)
-├── fast-lifespan-demo/        Lifespan + pytest
-├── fastapi-latelimits-demo/   Rate limit + Redis cache
-├── reservation-demo/          จองสินค้าชิ้นสุดท้าย (Lock)
-├── fastapi-template-engine/   Jinja2 template
+├── websocket/                 WebSocket notifications
+├── sse_demo/                  streaming response
+├── upload/                    file upload
+├── image_process/             AI image prediction (Keras)
+├── fast-lifespan-demo/        lifespan + pytest
+├── fastapi-latelimits-demo/   rate limit + Redis cache
+├── reservation-demo/          last-item reservation (Lock)
+├── fastapi-template-engine/   Jinja2 templates
 ├── fastapi_validation_lesson/ Pydantic validation
-├── cookie/                    Cookie session
-├── frontend/                  Next.js (หน้าเว็บทั้งหมด)
-├── run_all.py                 เปิด backend หลัก + Redis
-├── RUN.md                     คำสั่งรันทั้งหมด + พอร์ต
-├── pyproject.toml / uv.lock   dependency ของ Python
-└── README.md                  ไฟล์นี้
+├── cookie/                    cookie sessions
+├── frontend/                  Next.js (all web pages)
+├── run_all.py                 start main backends + Redis
+├── RUN.md                     every run command + ports
+├── pyproject.toml / uv.lock   Python dependencies
+└── README.md                  this file
 ```
 
 <br>
 
 ---
 
-## 🚀 แผนต่อไป
+## 🚀 Next Steps
 
-- [ ] **ออกแบบหน้าเว็บใหม่ให้สวยขึ้น** — เลือก UI template ก่อน แล้วค่อยปรับทุกหน้า (`/`, `/products`, `/catalog`, `/graphql-shop`) ให้ใช้ดีไซน์เดียวกัน
-- [ ] ทำ layout / navbar กลางที่ทุกหน้าใช้ร่วมกัน
-- [ ] รองรับมือถือ (responsive) ทุกหน้า
+- [ ] **Redesign the web pages** — pick a UI template first, then give every page (`/`, `/products`, `/catalog`, `/graphql-shop`) the same design
+- [ ] Add a shared layout / navbar for all pages
+- [ ] Make every page responsive on mobile
 
 <br>
 
 ---
 
-<sub>จัดทำโดย SutthirakP · รายวิชาเขียนเว็บด้วย Python</sub>
+<sub>Made by SutthirakP · Python Web Development course</sub>

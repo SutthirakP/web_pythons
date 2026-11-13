@@ -1,29 +1,29 @@
-# Cookie — จำชื่อผู้ใช้
+# Cookie — Remember the User
 
-ตัวอย่างจากคาบเรียน: ให้ server "จำ" ผู้ใช้ได้ทั้งที่ HTTP เป็น stateless โดยใช้ cookie
+Class example: let the server "remember" a user even though HTTP is stateless, by using a cookie.
 
-| Endpoint | หน้าที่ |
+| Endpoint | What it does |
 |---|---|
-| `POST /set-name` | รับชื่อ → สุ่ม `session_id` → เก็บ `session_id → ชื่อ` ไว้ฝั่ง server → ส่ง cookie (HttpOnly, 1 ชม.) |
-| `GET /welcome` | อ่าน cookie → ทักทายด้วยชื่อ · ไม่มี cookie ได้ **401** |
-| `POST /forget` | ลบ session ฝั่ง server + สั่งเบราว์เซอร์ลบ cookie |
+| `POST /set-name` | Takes a name → creates a random `session_id` → stores `session_id → name` on the server → sends a cookie (HttpOnly, 1 hour) |
+| `GET /welcome` | Reads the cookie → greets the user by name · no cookie = **401** |
+| `POST /forget` | Deletes the server-side session + tells the browser to delete the cookie |
 
-## สิ่งที่ได้เรียนรู้
+## What I learned
 
-- **`response.set_cookie(...)`** — สั่งเบราว์เซอร์เก็บ cookie (ส่งไปกับ header `Set-Cookie`)
-- **`Cookie()`** — อ่าน cookie ที่เบราว์เซอร์แนบมาเองทุก request
+- **`response.set_cookie(...)`** — tells the browser to store a cookie (sent in the `Set-Cookie` header)
+- **`Cookie()`** — reads the cookie the browser sends automatically with every request
 - **`response.delete_cookie(...)`** — logout
-- **เก็บแค่ session ID สุ่ม** (`secrets.token_urlsafe`) ไม่เก็บชื่อหรือ user ID ตรง ๆ ใน cookie
-- **`httponly=True`** — JavaScript อ่าน cookie ไม่ได้ (กัน XSS)
-- bug ที่เคยเจอ: `sessions = dict[str, str] = {}` ต้องเป็น `:` · `http_only` ต้องเป็น `httponly`
+- **Store only a random session ID** (`secrets.token_urlsafe`), never the name or user ID itself
+- **`httponly=True`** — JavaScript can't read the cookie (protects against XSS)
+- Bugs I hit: `sessions = dict[str, str] = {}` needs `:` · `http_only` must be `httponly`
 
-เวอร์ชันเต็มในโปรเจกต์หลัก (session ใน Redis + Remember me): [`appm2m/COOKIE.md`](../appm2m/COOKIE.md)
+Full version in the main project (sessions in Redis + Remember me): [`appm2m/COOKIE.md`](../appm2m/COOKIE.md)
 
-## รัน
+## Run
 
 ```powershell
 cd cookie
 uv run fastapi dev main.py --port 8010
 ```
 
-เปิด `http://127.0.0.1:8010/docs` → `POST /set-name` → `GET /welcome`
+Open `http://127.0.0.1:8010/docs` → `POST /set-name` → `GET /welcome`
