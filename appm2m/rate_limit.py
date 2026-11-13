@@ -10,17 +10,35 @@ LOGIN_LIMIT = 5  # attempts
 LOGIN_WINDOW = 60  # seconds
 
 
-async def connect_redis() -> redis.Redis | None:
-    """Called once by the lifespan. Returns None if Redis isn't reachable."""
-    client = redis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=2)
+async def connect_redis() -> redis.Redis:
+    """Called once by the lifespan.
+
+    Always returns the client, even if Redis is down right now: redis-py opens a
+    fresh connection on every command, so once Redis comes back (docker start
+    my-radis) login works again by itself - no backend restart needed.
+    """
+    # timeouts so a stopped container fails fast instead of hanging the request
+    client = redis.from_url(
+        REDIS_URL, decode_responses=True, socket_connect_timeout=2, socket_timeout=2
+    )
     try:
         await client.ping()
+        print(f"[STARTUP] connected to Redis at {REDIS_URL}")
     except RedisError as error:
-        print(f"[STARTUP] WARNING: Redis not reachable at {REDIS_URL} ({error}) - login is disabled")
-        await client.aclose()
-        return None
-    print(f"[STARTUP] connected to Redis at {REDIS_URL}")
+        print(
+            f"[STARTUP] WARNING: Redis not reachable at {REDIS_URL} ({error}) - "
+            "login answers 503 until Redis is up (retried on every request)"
+        )
     return client
+
+
+async def redis_is_up(r: redis.Redis | None) -> bool:
+    if r is None:
+        return False
+    try:
+        return await r.ping()
+    except RedisError:
+        return False
 
 
 def limiter(name: str, limit: int, window: int):
@@ -42,9 +60,10 @@ def limiter(name: str, limit: int, window: int):
                 await r.expire(key, window)
             ttl = await r.ttl(key)
         except RedisError:
+            # Redis is down right now - try again on the next request
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Rate limiter unavailable (lost connection to Redis)",
+                detail="Rate limiter unavailable (Redis is not running - start it with: docker start my-radis)",
             )
 
         if count > limit:

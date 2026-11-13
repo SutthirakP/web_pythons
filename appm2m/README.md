@@ -13,10 +13,15 @@
 | WebSocket chatbot | `chatbot.py` | `/ws/chat` ตอบทีละคำ (stream), ส่งแจ้งเตือนหาทุกคนเมื่อสินค้าเปลี่ยน, นับคนออนไลน์ |
 | อัปโหลดรูปสินค้า | `upload.py` | `POST /upload` → ได้ชื่อไฟล์ → ผูกกับสินค้า, จำกัดชนิด/ขนาดไฟล์, กัน path traversal |
 | Lifespan | `main.py` | สร้างตาราง + ทดสอบต่อ DB ตอนเปิด server, ปิด connection ตอนปิด, `/health` |
-| Test | `conftest.py`, `test_main.py` | pytest + `TestClient`, ใช้ DB ชั่วคราวไม่แตะข้อมูลจริง, 21 test |
+| Test | `conftest.py`, `test_main.py` | pytest + `TestClient`, ใช้ DB ชั่วคราวไม่แตะข้อมูลจริง, 38 test |
 | Rate limit | `rate_limit.py` | login ได้ 5 ครั้ง/นาที นับใน Redis ด้วย `INCR` + `EXPIRE` |
+| CORS ห้าม HEAD | `cors.py` | `@app.head("/foo")`, อนุญาตทุก method ยกเว้น HEAD, ทำไม simple request ต้องเช็คเพิ่ม |
+| Streaming (SSE) | `streaming.py` | ✨ เขียนคำอธิบายสินค้าส่งทีละคำด้วย `EventSourceResponse` → หน้าเว็บอ่านด้วย `EventSource` |
+| Cookie login | `session.py`, `auth.py` | จำสถานะ login ด้วย `HttpOnly` cookie + session ใน Redis, ช่องติ๊ก Remember me (session cookie vs 7 วัน), `GET /me`, logout ลบทั้งสองฝั่ง |
 
-คู่มือละเอียด: [RATE_LIMIT.md](RATE_LIMIT.md) · [TESTING.md (lifespan + test)](../fast-lifespan-demo/TESTING.md)
+คู่มือละเอียด: [RATE_LIMIT.md](RATE_LIMIT.md) · [CORS_STREAMING.md](CORS_STREAMING.md) · [COOKIE.md](COOKIE.md) · [TESTING.md (lifespan + test)](../fast-lifespan-demo/TESTING.md)
+
+> เปิดหน้าเว็บที่ **`http://localhost:3000/catalog`** (ไม่ใช่ 127.0.0.1) ไม่งั้น cookie login จะไม่ถูกส่ง — ดู [COOKIE.md](COOKIE.md)
 
 ## รัน
 

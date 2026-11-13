@@ -1,3 +1,5 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from appm2m.main import app
@@ -215,3 +217,213 @@ def test_login_refused_when_redis_is_down(client):
 
 def test_health_shows_redis(client):
     assert client.get("/health").json()["redis_ready"] is True
+
+
+# ---------- CORS: every method except HEAD ----------
+
+ORIGIN = {"Origin": "http://localhost:3000"}
+
+
+def test_head_foo_works_without_browser(client):
+    # no Origin header = not a browser cross-origin call -> CORS doesn't apply
+    r = client.head("/foo")
+    assert r.status_code == 200
+    assert r.headers["X-Foo"] == "hello from HEAD"
+
+
+def test_head_foo_gets_no_cors_header(client):
+    # what the browser sends for fetch(url, {method: "HEAD"}) - no preflight
+    r = client.head("/foo", headers=ORIGIN)
+    assert r.status_code == 200  # the server still answers...
+    assert "access-control-allow-origin" not in r.headers  # ...but the browser will block it
+
+
+def test_get_foo_gets_cors_header(client):
+    r = client.get("/foo", headers=ORIGIN)
+    assert r.status_code == 200
+    assert r.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
+def test_preflight_rejects_head(client):
+    r = client.options("/foo", headers={**ORIGIN, "Access-Control-Request-Method": "HEAD"})
+    assert r.status_code == 400
+    assert "method" in r.text
+
+
+def test_preflight_allows_other_methods(client):
+    for method in ["GET", "POST", "PUT", "PATCH", "DELETE"]:
+        r = client.options("/foo", headers={**ORIGIN, "Access-Control-Request-Method": method})
+        assert r.status_code == 200, method
+
+
+# ---------- streaming description (SSE) ----------
+
+
+def read_events(response):
+    """Turn a text/event-stream body into a list of (event, data) pairs."""
+    events = []
+    for block in response.text.strip().split("\n\n"):
+        fields = dict(line.split(": ", 1) for line in block.splitlines() if ": " in line)
+        events.append((fields.get("event"), fields.get("data")))
+    return events
+
+
+def test_describe_streams_word_by_word(client, auth_headers, monkeypatch):
+    from appm2m import streaming
+    monkeypatch.setattr(streaming, "WORD_DELAY", 0)
+    monkeypatch.setattr(streaming, "THINKING_DELAY", 0)
+    product = client.post("/products/", json={"name": "USB Hub", "price": 20}, headers=auth_headers).json()
+
+    r = client.get(f"/products/{product['id']}/describe")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/event-stream")
+
+    events = read_events(r)
+    names = [name for name, _ in events]
+    assert names[0] == "start"
+    assert names[-1] == "done"
+    tokens = [json.loads(data) for name, data in events if name == "token"]
+    assert len(tokens) > 10  # many small pieces, not one big answer
+
+    full_text = json.loads(events[-1][1])["text"]
+    assert "".join(tokens) == full_text  # the pieces add up to the whole text
+    assert "USB Hub" in full_text
+    assert "$20.00" in full_text
+
+
+def test_describe_missing_product_is_404(client):
+    r = client.get("/products/999/describe")
+    assert r.status_code == 404
+
+
+# ---------- cookie: remember login status ----------
+
+
+def register_and_login(client, username="somchai", password="pw", remember=False):
+    client.post("/register", json={"username": username, "password": password})
+    return client.post(
+        "/login",
+        data={"username": username, "password": password, "remember": str(remember).lower()},
+    )
+
+
+def test_login_sets_session_cookie(client):
+    r = register_and_login(client)
+    assert r.status_code == 200
+
+    set_cookie = r.headers["set-cookie"]
+    assert set_cookie.startswith("session_id=")
+    assert "HttpOnly" in set_cookie  # JavaScript can't read it
+    assert "SameSite=lax" in set_cookie
+    assert "somchai" not in set_cookie  # only a random key, not the username
+
+
+def test_me_without_cookie_is_401(client):
+    assert client.get("/me").status_code == 401
+
+
+def test_me_remembers_user_from_cookie(client):
+    user_id = register_and_login(client).json()["user"]["id"]
+
+    # no Authorization header - TestClient just sends the cookie back, like a browser
+    r = client.get("/me")
+    assert r.status_code == 200
+    assert r.json() == {"id": user_id, "username": "somchai", "remember": False, "logged_in": True}
+
+
+def test_cookie_alone_can_add_product(client):
+    register_and_login(client)
+    r = client.post("/products/", json={"name": "Mouse", "price": 590})  # no Bearer token
+    assert r.status_code == 200
+
+
+def test_session_is_stored_in_redis(client, redis_db):
+    user_id = register_and_login(client).json()["user"]["id"]
+    session_id = client.cookies["session_id"]
+
+    stored = json.loads(redis_db.get(f"session:{session_id}"))
+    assert stored == {"user_id": user_id, "username": "somchai", "remember": False}
+    assert 0 < redis_db.ttl(f"session:{session_id}") <= 3600
+
+
+def test_fake_cookie_is_rejected(client):
+    client.cookies.set("session_id", "i-made-this-up")
+    assert client.get("/me").status_code == 401
+    assert client.post("/products/", json={"name": "Hack", "price": 1}).status_code == 401
+
+
+def test_logout_forgets_the_cookie(client, redis_db):
+    register_and_login(client)
+    session_id = client.cookies["session_id"]
+
+    r = client.post("/logout")
+    assert r.status_code == 200
+    assert 'session_id=""' in r.headers["set-cookie"]  # browser is told to delete it
+    assert redis_db.get(f"session:{session_id}") is None  # server forgot it too
+
+    client.cookies.set("session_id", session_id)  # even if someone kept a copy...
+    assert client.get("/me").status_code == 401  # ...it no longer works
+
+
+# ---------- "Remember me" checkbox ----------
+
+WEEK = 7 * 24 * 60 * 60
+
+
+def test_without_remember_me_is_a_session_cookie(client, redis_db):
+    r = register_and_login(client, remember=False)
+    set_cookie = r.headers["set-cookie"]
+    # no Max-Age / Expires = session cookie: the browser deletes it when it closes
+    assert "Max-Age" not in set_cookie
+    assert "expires" not in set_cookie.lower()
+    assert redis_db.ttl(f"session:{client.cookies['session_id']}") <= 3600
+
+
+def test_with_remember_me_cookie_lasts_7_days(client, redis_db):
+    r = register_and_login(client, remember=True)
+    assert f"Max-Age={WEEK}" in r.headers["set-cookie"]
+    assert 3600 < redis_db.ttl(f"session:{client.cookies['session_id']}") <= WEEK
+    assert client.get("/me").json()["remember"] is True
+
+
+def test_remember_defaults_to_false(client):
+    # /docs and old clients don't send the field at all
+    client.post("/register", json={"username": "somchai", "password": "pw"})
+    r = client.post("/login", data={"username": "somchai", "password": "pw"})
+    assert r.status_code == 200
+    assert r.json()["user"]["remember"] is False
+    assert "Max-Age" not in r.headers["set-cookie"]
+
+
+# ---------- Redis down at startup, back later ----------
+
+
+def test_login_recovers_when_redis_comes_back(client):
+    import redis.asyncio as aioredis
+
+    client.post("/register", json={"username": "somchai", "password": "pw"})
+    working = app.state.redis
+
+    # Redis "down": point at a port where nothing is listening
+    app.state.redis = aioredis.from_url("redis://localhost:6399/15", socket_connect_timeout=1)
+    try:
+        r = client.post("/login", data={"username": "somchai", "password": "pw"})
+        assert r.status_code == 503
+        assert "docker start my-radis" in r.json()["detail"]
+        assert client.get("/health").json()["redis_ready"] is False
+    finally:
+        app.state.redis = working  # Redis "back up" - same running server, no restart
+
+    assert client.get("/health").json()["redis_ready"] is True
+    assert client.post("/login", data={"username": "somchai", "password": "pw"}).status_code == 200
+
+
+def test_connect_redis_keeps_client_even_if_down(monkeypatch):
+    import asyncio
+
+    from appm2m import rate_limit
+
+    monkeypatch.setattr(rate_limit, "REDIS_URL", "redis://localhost:6399/15")
+    client = asyncio.run(rate_limit.connect_redis())
+    assert client is not None  # not None -> it will retry on later requests
+    assert asyncio.run(rate_limit.redis_is_up(client)) is False

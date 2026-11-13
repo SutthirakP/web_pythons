@@ -2,6 +2,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import ChatWidget from "./ChatWidget";
+import CorsLab from "./CorsLab";
+import DescribeStream from "./DescribeStream";
 import ImagePicker from "./ImagePicker";
 
 type Category = {
@@ -23,8 +25,17 @@ type Feedback = {
   text: string;
 };
 
-const API_URL = "http://127.0.0.1:8002";
-const TOKEN_STORAGE_KEY = "appm2m_token";
+// "localhost" (not 127.0.0.1) on purpose: the page runs on localhost:3000, and the
+// login cookie is only sent back when both are the same site (port doesn't matter).
+const API_URL = "http://localhost:8002";
+
+type User = { id: number; username: string; remember: boolean };
+
+// every call sends the session cookie along (credentials: "include") - that's how
+// the backend knows who is logged in, no token kept in JavaScript
+function api(path: string, init: RequestInit = {}) {
+  return fetch(`${API_URL}${path}`, { credentials: "include", ...init });
+}
 
 function imageUrl(filename: string | null) {
   return filename ? `${API_URL}/file/${filename}` : null;
@@ -57,6 +68,8 @@ export default function CatalogPage() {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   // bumped by the chat socket when anyone adds/edits/deletes a product -> refetch
   const [reloadKey, setReloadKey] = useState(0);
+  // product whose streamed description panel is open
+  const [describingId, setDescribingId] = useState<number | null>(null);
 
   const [categoryName, setCategoryName] = useState("");
   const [addingCategory, setAddingCategory] = useState(false);
@@ -79,26 +92,34 @@ export default function CatalogPage() {
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
 
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [registering, setRegistering] = useState(false);
 
-  // Restore a saved session on load (per-browser only, not shared).
+  // On load: ask the backend "who am I?" - the browser sends the session cookie
+  // automatically, so a refresh or a new tab stays logged in.
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(TOKEN_STORAGE_KEY);
-      if (saved) setToken(saved);
-    } catch {
-      // localStorage unavailable (private mode etc.) - just stay logged out.
+    async function restoreSession() {
+      try {
+        const response = await api("/me");
+        if (response.ok) {
+          const me = await response.json();
+          setUser({ id: me.id, username: me.username, remember: me.remember });
+        }
+      } catch {
+        // backend down - just show the login form
+      } finally {
+        setCheckingSession(false);
+      }
     }
-  }, []);
 
-  function authHeaders(): HeadersInit {
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  }
+    restoreSession();
+  }, []);
 
   // LOG IN
   async function login(event: FormEvent<HTMLFormElement>) {
@@ -110,8 +131,9 @@ export default function CatalogPage() {
       const body = new URLSearchParams();
       body.set("username", loginUsername);
       body.set("password", loginPassword);
+      body.set("remember", rememberMe ? "true" : "false");
 
-      const response = await fetch(`${API_URL}/login`, {
+      const response = await api("/login", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: body.toString(),
@@ -123,12 +145,8 @@ export default function CatalogPage() {
         throw new Error(result.detail || "Login failed");
       }
 
-      setToken(result.access_token);
-      try {
-        localStorage.setItem(TOKEN_STORAGE_KEY, result.access_token);
-      } catch {
-        // ignore - session just won't survive a refresh
-      }
+      // the response also set the session cookie - nothing to store here
+      setUser(result.user);
       setLoginPassword("");
       setFeedback({ type: "success", text: `Logged in as ${loginUsername}` });
     } catch (error) {
@@ -146,7 +164,7 @@ export default function CatalogPage() {
     setRegistering(true);
 
     try {
-      const response = await fetch(`${API_URL}/register`, {
+      const response = await api(`/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: loginUsername, password: loginPassword }),
@@ -172,16 +190,11 @@ export default function CatalogPage() {
   // LOG OUT
   async function logout() {
     try {
-      await fetch(`${API_URL}/logout`, { method: "POST", headers: authHeaders() });
+      await api("/logout", { method: "POST" }); // server deletes the session + the cookie
     } catch {
-      // token may already be stale - clear the local session anyway
+      // backend down - forget the user locally anyway
     }
-    setToken(null);
-    try {
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
-    } catch {
-      // ignore
-    }
+    setUser(null);
     setFeedback({ type: "success", text: "Logged out" });
   }
 
@@ -190,8 +203,8 @@ export default function CatalogPage() {
     async function load() {
       try {
         const [categoriesRes, productsRes] = await Promise.all([
-          fetch(`${API_URL}/categories/`),
-          fetch(`${API_URL}/products/`),
+          api(`/categories/`),
+          api(`/products/`),
         ]);
 
         if (!categoriesRes.ok || !productsRes.ok) {
@@ -221,9 +234,8 @@ export default function CatalogPage() {
     form.append("file", file);
 
     // no Content-Type header: the browser sets multipart/form-data with the boundary itself
-    const response = await fetch(`${API_URL}/upload`, {
+    const response = await api(`/upload`, {
       method: "POST",
-      headers: authHeaders(),
       body: form,
     });
 
@@ -244,9 +256,9 @@ export default function CatalogPage() {
     setAddingCategory(true);
 
     try {
-      const response = await fetch(`${API_URL}/categories/`, {
+      const response = await api(`/categories/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: categoryName }),
       });
 
@@ -273,9 +285,8 @@ export default function CatalogPage() {
     setFeedback(null);
 
     try {
-      const response = await fetch(`${API_URL}/categories/${categoryId}`, {
+      const response = await api(`/categories/${categoryId}`, {
         method: "DELETE",
-        headers: authHeaders(),
       });
 
       if (!response.ok) {
@@ -307,9 +318,9 @@ export default function CatalogPage() {
     try {
       const image = productImage ? await uploadImage(productImage) : null;
 
-      const response = await fetch(`${API_URL}/products/`, {
+      const response = await api(`/products/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: productName,
           description: productDescription.trim() === "" ? null : productDescription,
@@ -346,9 +357,8 @@ export default function CatalogPage() {
     setFeedback(null);
 
     try {
-      const response = await fetch(`${API_URL}/products/${productId}`, {
+      const response = await api(`/products/${productId}`, {
         method: "DELETE",
-        headers: authHeaders(),
       });
 
       if (!response.ok) {
@@ -361,6 +371,39 @@ export default function CatalogPage() {
       setFeedback({ type: "success", text: "Product deleted" });
     } catch (error) {
       const text = error instanceof Error ? error.message : "Failed to delete product";
+      setFeedback({ type: "error", text });
+    }
+  }
+
+  // SAVE a streamed description (keeps every other field as it is)
+  async function saveDescription(product: Product, description: string) {
+    setFeedback(null);
+
+    try {
+      const response = await api(`/products/${product.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: product.name,
+          description,
+          price: product.price,
+          image: product.image,
+          category_ids: product.categories.map((category) => category.id),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 401) throw new Error("Please log in first");
+        throw new Error(result.detail || "Failed to save description");
+      }
+
+      setProducts((current) => current.map((p) => (p.id === product.id ? result : p)));
+      setFeedback({ type: "success", text: "Description saved" });
+      setDescribingId(null);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "Failed to save description";
       setFeedback({ type: "error", text });
     }
   }
@@ -392,9 +435,9 @@ export default function CatalogPage() {
     try {
       const image = editImageFile ? await uploadImage(editImageFile) : editDraft.image;
 
-      const response = await fetch(`${API_URL}/products/${productId}`, {
+      const response = await api(`/products/${productId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: editDraft.name,
           description: editDraft.description.trim() === "" ? null : editDraft.description,
@@ -443,9 +486,16 @@ export default function CatalogPage() {
       </header>
 
       <section className="card p-4">
-        {token ? (
-          <div className="flex items-center justify-between">
-            <span className="text-sm">🔓 Logged in — add/edit/delete unlocked</span>
+        {checkingSession ? (
+          <span className="text-sm text-muted">Checking login cookie…</span>
+        ) : user ? (
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm">
+              🔓 Logged in as <strong>{user.username}</strong>{" "}
+              <span className="text-muted">
+                (user #{user.id} · {user.remember ? "remembered for 7 days" : "until the browser closes"})
+              </span>
+            </span>
             <button
               type="button"
               onClick={logout}
@@ -491,6 +541,19 @@ export default function CatalogPage() {
                   style={{ width: "10rem" }}
                 />
               </div>
+              {!showRegister && (
+                <label
+                  className="remember-me"
+                  title="Ticked: stay logged in for 7 days. Not ticked: log out when the browser closes."
+                >
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(event) => setRememberMe(event.target.checked)}
+                  />
+                  Remember me
+                </label>
+              )}
               {showRegister ? (
                 <button
                   type="submit"
@@ -555,10 +618,10 @@ export default function CatalogPage() {
               </div>
               <button
                 type="submit"
-                disabled={addingCategory || !token}
+                disabled={addingCategory || !user}
                 className="btn btn-primary"
               >
-                {addingCategory ? "Adding…" : token ? "+ Add category" : "Log in to add"}
+                {addingCategory ? "Adding…" : user ? "+ Add category" : "Log in to add"}
               </button>
             </form>
 
@@ -670,13 +733,15 @@ export default function CatalogPage() {
 
               <button
                 type="submit"
-                disabled={addingProduct || !token}
+                disabled={addingProduct || !user}
                 className="btn btn-primary"
               >
-                {addingProduct ? "Adding…" : token ? "+ Add product" : "Log in to add"}
+                {addingProduct ? "Adding…" : user ? "+ Add product" : "Log in to add"}
               </button>
             </form>
           </section>
+
+          <CorsLab apiUrl={API_URL} />
         </div>
 
         <section className="card p-6">
@@ -775,11 +840,11 @@ export default function CatalogPage() {
                       <button
                         type="button"
                         onClick={() => saveEdit(product.id)}
-                        disabled={!token || savingEdit}
+                        disabled={!user || savingEdit}
                         className="btn btn-primary"
                         style={{ width: "auto" }}
                       >
-                        {!token ? "Log in to save" : savingEdit ? "Saving…" : "Save"}
+                        {!user ? "Log in to save" : savingEdit ? "Saving…" : "Save"}
                       </button>
                     </div>
                   </li>
@@ -813,6 +878,18 @@ export default function CatalogPage() {
 
                       <button
                         type="button"
+                        onClick={() =>
+                          setDescribingId((id) => (id === product.id ? null : product.id))
+                        }
+                        className={describingId === product.id ? "icon-btn sparkle active" : "icon-btn sparkle"}
+                        aria-label={`Write a description for ${product.name}`}
+                        title="Write a description (streaming)"
+                      >
+                        ✨
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => startEdit(product)}
                         className="icon-btn"
                         aria-label={`Edit ${product.name}`}
@@ -839,6 +916,16 @@ export default function CatalogPage() {
                           </span>
                         ))}
                       </div>
+                    )}
+
+                    {describingId === product.id && (
+                      <DescribeStream
+                        apiUrl={API_URL}
+                        productId={product.id}
+                        canSave={user !== null}
+                        onUse={(text) => saveDescription(product, text)}
+                        onClose={() => setDescribingId(null)}
+                      />
                     )}
                   </li>
                 )

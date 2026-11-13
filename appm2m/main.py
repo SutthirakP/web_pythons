@@ -2,19 +2,22 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import Depends, FastAPI, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, inspect, select, text
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from .auth import get_current_user
 from .auth import router as auth_router
 from .chatbot import notify_product_change, product_to_dict
 from .chatbot import router as chatbot_router
+from .cors import ALLOWED_METHODS, ALLOWED_ORIGINS, MethodCheckingCORSMiddleware
+from .cors import router as cors_router
 from .upload import delete_image, image_path
 from .upload import router as upload_router
 from .database import Base, engine, get_db
 from .models import CategoryDB, ProductDB
-from .rate_limit import connect_redis
+from .rate_limit import connect_redis, redis_is_up
+from .streaming import router as streaming_router
 from .schemas import (
     CategoryCreate,
     CategoryResponse,
@@ -58,20 +61,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# every method except HEAD - see cors.py for why it's a subclass
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    MethodCheckingCORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=ALLOWED_METHODS,
     allow_headers=["*"],
 )
 
 app.include_router(auth_router)
 app.include_router(chatbot_router)
 app.include_router(upload_router)
+app.include_router(cors_router)
+app.include_router(streaming_router)
 
 
 def get_categories_by_ids(category_ids: list[int], db: Session) -> list[CategoryDB]:
@@ -88,19 +91,21 @@ def get_categories_by_ids(category_ids: list[int], db: Session) -> list[Category
     return categories
 
 
+def count_products() -> int:
+    with engine.connect() as conn:
+        return conn.execute(select(func.count()).select_from(ProductDB)).scalar_one()
+
+
 @app.get("/health")
-def health():
+async def health():
     ready = getattr(app.state, "db_ready", False)
-    products = None
-    if ready:
-        with engine.connect() as conn:
-            products = conn.execute(select(func.count()).select_from(ProductDB)).scalar_one()
+    products = await run_in_threadpool(count_products) if ready else None
     return {
         "status": "online",
         "db_ready": ready,
         "started_at": getattr(app.state, "started_at", None),
         "products": products,
-        "redis_ready": getattr(app.state, "redis", None) is not None,
+        "redis_ready": await redis_is_up(getattr(app.state, "redis", None)),  # live PING
     }
 
 
